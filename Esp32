@@ -1,0 +1,173 @@
+// ESCLAVO (recibe datos del maestro)
+
+
+#include <esp_now.h>
+#include <WiFi.h>
+#include <LiquidCrystal_I2C.h>
+#include <SD.h>
+
+using namespace std;
+
+int lcdColumns = 16;
+int lcdRows = 2;
+LiquidCrystal_I2C lcd(0x27, lcdColumns, lcdRows);
+
+
+string myKeys[] = { "18079", "39552" };
+
+
+struct aRecibir {
+  char palabra[6];
+  int numero;
+};
+// crea una estructura para recibir los datos
+aRecibir Datos;
+
+
+
+// Funcion que se ejecuta cuando se recibe un mensaje
+void OnRecv(const uint8_t *mac, const uint8_t *incomingData, int len) {
+  memcpy(&Datos, incomingData, sizeof(Datos));
+  Serial.print("Bytes recibidos: ");
+  Serial.println(len);
+  Serial.print("Datos recibidos : ");
+  Serial.println(Datos.palabra);
+  Serial.println(Datos.numero);
+
+
+
+
+  string a = Datos.palabra;
+
+  bool check = false;
+
+  for (int i = 0; i < 2; ++i) {
+
+    string b = myKeys[i];
+
+    if (b == a) {
+      check = true;
+    }
+  }
+
+  if (check) {
+
+    lcd.init();
+    lcd.backlight();
+    // ubica el cursor en primera columna, primera fila
+    lcd.setCursor(0, 0);
+    // display mensaje
+    lcd.print("42");
+    // limpia pantalla
+    // ubica el cursor en primera columna, segunda fila
+    lcd.setCursor(0, 1);
+    lcd.print("Hola Mundo!");
+  }
+}
+
+void listDir(fs::FS &fs, const char *dirname, uint8_t levels) {
+  Serial.printf("Listing directory: %s\n", dirname);
+
+  File root = fs.open(dirname);
+  if (!root) {
+    Serial.println("Failed to open directory");
+    return;
+  }
+  if (!root.isDirectory()) {
+    Serial.println("Not a directory");
+    return;
+  }
+
+  File file = root.openNextFile();
+  while (file) {
+    if (file.isDirectory()) {
+      Serial.print("  DIR : ");
+      Serial.println(file.name());
+      if (levels) {
+        listDir(fs, file.name(), levels - 1);
+      }
+    } else {
+      Serial.print("  FILE: ");
+      Serial.print(file.name());
+      Serial.print("  SIZE: ");
+      Serial.println(file.size());
+    }
+    file = root.openNextFile();
+  }
+}
+
+void readFile(fs::FS &fs, const char *path) {
+  Serial.printf("Reading file: %s\n", path);
+
+  File file = fs.open(path);
+  if (!file) {
+    Serial.println("Failed to open file for reading");
+    return;
+  }
+
+  Serial.print("Read from file: ");
+  while (file.available()) {
+    Serial.write(file.available());
+  }
+  file.close();
+}
+
+
+void appendFile(fs::FS &fs, const char *path, const char *message) {
+  Serial.printf("Appending to file: %s\n", path);
+
+  File file = fs.open(path, FILE_APPEND);
+  if (!file) {
+    Serial.println("Failed to open file for appending");
+    return;
+  }
+  if (file.print(message)) {
+    Serial.println("Message appended");
+  } else {
+    Serial.println("Append failed");
+  }
+  file.close();
+}
+
+void setup() {
+  // inicializo Serial Monitor
+  Serial.begin(115200);
+  // Seteo placa como estacion Wi-Fi
+  WiFi.mode(WIFI_STA);
+  // Inicializo ESP-NOW
+  if (esp_now_init() != ESP_OK) {
+    Serial.println("Error inicializando ESP-NOW");
+    return;
+  }
+
+
+  // Despues de inicializar el protocolo ESP-Now registro la funcion que recibe los mensajes
+  // para poder ejecutarla cuando llega un mensaje.
+  esp_now_register_recv_cb(OnRecv);
+
+  //SD
+  if (!SD.begin()) {
+    Serial.println("Card Mount Failed");
+    return;
+  }
+  uint8_t cardType = SD.cardType();
+
+  if (cardType == CARD_NONE) {
+    Serial.println("No SD card attached");
+    return;
+  }
+
+  Serial.print("SD Card Type: ");
+  if (cardType == CARD_MMC) {
+    Serial.println("MMC");
+  } else if (cardType == CARD_SD) {
+    Serial.println("SDSC");
+  } else if (cardType == CARD_SDHC) {
+    Serial.println("SDHC");
+  } else {
+    Serial.println("UNKNOWN");
+  }
+}
+
+void loop() {
+}
